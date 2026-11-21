@@ -28,4 +28,20 @@ public class Carrito {
     public boolean estaVacio() {
         return items.isEmpty();
     }
+    //los metodos nuevos para el CU eliminar item del carrito
+    //recorre todos los items del carrito, busca cual es el item 
+    //cuyo id se envio como parametro y lo retorna
+    public ItemCarrito buscarItem(Long idItem) {
+        for (ItemCarrito item : items) {
+            if (item.getIdItemCarrito().equals(idItem)) {
+                return item;
+            }
+        }
+        return null;
+    }
+    //elimina el item del listado de items asi luego cunado se hace save carrito
+    //este item se elimina automaticamente por cascada.ALL
+    public void eliminarItem(ItemCarrito item) {
+        items.remove(item);
+    }
 }
