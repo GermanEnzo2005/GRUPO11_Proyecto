@@ -33,4 +33,10 @@ public class DetallePedido {
         this.impactoDetalle = impactoDetalle;
         this.producto = producto;
     }
+
+    // Para el CU-04: Solicitar Devolucion de Producto
+    // Retorna true si la cantidad solicitada no es vacio y es mayor a 0 y menor o igual a la cantidad de detalle pedido  
+    public boolean validarQueCantidadNoSePase(Integer cantidadSolicitada) {
+        return cantidadSolicitada != null && cantidadSolicitada > 0 && cantidadSolicitada <= this.cantidad;
+    }
 }

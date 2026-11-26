@@ -1,5 +1,6 @@
 package com.aydsii.demo.service;
 
+import com.aydsii.demo.config.ConfiguracionNegocio;
 import com.aydsii.demo.dto.CarritoDTO;
 import com.aydsii.demo.dto.ItemCarritoDTO;
 import com.aydsii.demo.exception.BusinessException;
@@ -60,11 +61,14 @@ public class CarritoService {
         float descuentoPedido = nivel.getDescuentoPedido();
 
         // primero el mayorista y después el de nivel 
-        boolean descuentoMayorista = cantidadTotal >= 30;
+        // singleton, ahora se verifica la cantidad mayorista en esa clase y se obtiene el descuwento 
+        ConfiguracionNegocio config = ConfiguracionNegocio.getUnica();
+
+        boolean descuentoMayorista = cantidadTotal >= config.getCantidadMayorista();
 
         float subtotalConDescuento = subtotalCarrito;
         if (descuentoMayorista) {
-            subtotalConDescuento = subtotalConDescuento - (subtotalConDescuento * 0.15f);
+            subtotalConDescuento = subtotalConDescuento - (subtotalConDescuento * config.getDescuentoMayorista());
         }
         subtotalConDescuento = subtotalConDescuento - (subtotalConDescuento * descuentoPedido);
         //el carrito ya actualizado

@@ -1,6 +1,7 @@
 package com.aydsii.demo.service;
 
 import com.aydsii.demo.dto.ComprarDTO;
+import com.aydsii.demo.dto.DevolucionDTO;
 import com.aydsii.demo.exception.BusinessException;
 import com.aydsii.demo.model.Carrito;
 import com.aydsii.demo.model.ItemCarrito;
@@ -8,6 +9,7 @@ import com.aydsii.demo.model.Producto;
 import com.aydsii.demo.model.Cliente;
 import com.aydsii.demo.model.Nivel;
 import com.aydsii.demo.model.Pedido;
+import com.aydsii.demo.enums.EstadoDevolucion;
 import com.aydsii.demo.enums.EstadoPedido;
 import com.aydsii.demo.model.Envio;
 import com.aydsii.demo.repository.EnvioRepository;
@@ -15,13 +17,22 @@ import com.aydsii.demo.repository.PedidoRepository;
 import com.aydsii.demo.service.transporte.TransporteApiClient;
 import com.aydsii.demo.service.transporte.TransporteApiFactory;
 import com.aydsii.demo.repository.CarritoRepository;
+import com.aydsii.demo.repository.DevolucionRepository;
 import com.aydsii.demo.model.Localidad;
 import com.aydsii.demo.repository.LocalidadRepository;
 import org.springframework.stereotype.Service;
 import com.aydsii.demo.dto.PedidoDTO;
+import com.aydsii.demo.dto.SolicitudDevolucionDTO;
 import com.aydsii.demo.model.DetallePedido;
+import com.aydsii.demo.model.Devolucion;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
+
+// Para Simple Logging Facade
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,18 +40,23 @@ import java.util.List;
 
 @Service
 public class PedidoService {
+    // Fachada de registro SLF4J (Simple Logging Facade for Java)
+    private static final Logger registraLog = LoggerFactory.getLogger(PedidoService.class);
+
     private final CarritoRepository carritoRepository;
     private final LocalidadRepository localidadRepository;
     private final PedidoRepository pedidoRepository;
     private final EnvioRepository envioRepository;
     private final TransporteApiFactory transporteApiFactory; // Inyección de la factoría
+    private final DevolucionRepository devolucionRepository; // CU-04: Solicitar Devolucion de Producto
 
-    public PedidoService(CarritoRepository carritoRepository, LocalidadRepository localidadRepository, PedidoRepository pedidoRepository, EnvioRepository envioRepository, TransporteApiFactory transporteApiFactory) {
+    public PedidoService(CarritoRepository carritoRepository, LocalidadRepository localidadRepository, PedidoRepository pedidoRepository, EnvioRepository envioRepository, TransporteApiFactory transporteApiFactory, DevolucionRepository devolucionRepository) {
         this.carritoRepository = carritoRepository;
         this.localidadRepository = localidadRepository;
         this.pedidoRepository = pedidoRepository;
         this.envioRepository = envioRepository;
         this.transporteApiFactory = transporteApiFactory;
+        this.devolucionRepository = devolucionRepository;   // CU-04: Solicitar Devolucion de Producto
     }
 
     
@@ -156,5 +172,87 @@ public class PedidoService {
 
         //con todo ya terminado se envia los datos del pedido al usuario
         return new PedidoDTO(pedido);
+    }
+
+
+    // CU-04: Solicitar Devolucion de Producto
+
+    @Transactional
+    public DevolucionDTO hacerDevolucion(SolicitudDevolucionDTO solicitud) {
+        registraLog.info("Iniciando solicitud de devolucion (CU-04) para el Pedido ID: {}", solicitud.getIdPedido());  // Log
+
+        // Recupera el pedido con el id del pedido que tiene la solicitud
+        Pedido pedido = pedidoRepository.findById(solicitud.getIdPedido())
+                .orElseThrow(() -> {
+                    registraLog.error("No se encontro el pedido con ID: {}", solicitud.getIdPedido());  // Log
+                    return new BusinessException("No se encontró el pedido con ID: " + solicitud.getIdPedido(), HttpStatus.NOT_FOUND);
+                });
+
+        // RN-01: Verificar que el pedido pertenezca al cliente: se confirma ya en la interfaz, ya que el cliente solo puede ver sus propios pedidos
+
+        // Obtiene la fecha en la que se realizó el pedido
+        LocalDate fechaPedido = pedido.getFechaPedido();
+        registraLog.debug("Validando plazo de devolucion para fechaPedido: {}", fechaPedido);   // Log
+
+        // Se valida que el plazo no sea mayor a 15 dias 
+        if (!validarPlazo(fechaPedido)) {
+            registraLog.warn("El pedido {} supera el plazo maximo de 15 dias.", pedido.getIdPedido());  // Log
+            throw new BusinessException("El pedido supera el plazo máximo de 15 días para devoluciones y ya no puede devolverse.", HttpStatus.BAD_REQUEST);
+        }
+
+        // Obtiene el estado del pedido
+        EstadoPedido estadoPedido = pedido.getEstadoPedido();
+
+        // Verifica que el estado del pedido esté en ENTREGADO
+        if (!verificarEstado(estadoPedido)) {
+            registraLog.warn("Intento de devolucion sobre pedido {} en estado {}", pedido.getIdPedido(), estadoPedido);   // Log
+            throw new BusinessException("Solo se pueden devolver productos de pedidos que se encuentren en estado ENTREGADO.", HttpStatus.BAD_REQUEST);
+        }
+
+        // Obtiene el detalle pedido que contiene el producto indicado dentro del pedido indicado
+        DetallePedido detallePedido = pedido.getDetallePedidoPorProducto(solicitud.getIdProducto());
+
+        // Verifica que se haya encontrado el detalle pedido que contiene el producto indicado dentro del pedido indicado
+        if (detallePedido == null) {
+            registraLog.warn("El producto con ID {} no pertenece al pedido {}", solicitud.getIdProducto(), pedido.getIdPedido());    // Log
+            throw new BusinessException("El producto indicado no forma parte del pedido.", HttpStatus.BAD_REQUEST);
+        }
+
+        // Obtiene la cantidad que se quiere devolver
+        Integer cantidad = solicitud.getCantidad();
+
+        // Valida que la cantidad solicitada para devolucion no supere la cantidad comprada
+        if (!detallePedido.validarQueCantidadNoSePase(cantidad)) {
+            registraLog.warn("Cantidad solicitada ({}) supera la comprada ({}) para el producto {}", 
+                cantidad, detallePedido.getCantidad(), detallePedido.getProducto().getNombre());    // Log
+            throw new BusinessException("La cantidad a devolver supera la cantidad adquirida para el producto: " + detallePedido.getProducto().getNombre(), HttpStatus.BAD_REQUEST);
+        }
+
+        // Instancia Devolucion en estado PENDIENTE
+        Devolucion devolucion = new Devolucion(
+                solicitud.getMotivo(),
+                solicitud.getDescripcion(),
+                detallePedido,
+                EstadoDevolucion.PENDIENTE
+        );
+
+        // Se guarda la devolucion en el repositorio
+        Devolucion devolucionGuardada = devolucionRepository.save(devolucion);
+        registraLog.info("Devolucion registrada exitosamente en BD con ID: {}", devolucionGuardada.getIdDevolucion());  // Log
+
+        // Con todo realizado se mapea y retorna el DTO con los datos de la devolucion al cliente
+        return new DevolucionDTO(devolucionGuardada);
+    }
+
+    // Valida que no hayan transcurrido más de 15 días desde la fecha del pedido: True si está dentro del rango
+    private boolean validarPlazo(LocalDate fechaPedido) {
+        if (fechaPedido == null) return false;
+        long diasTranscurridos = java.time.temporal.ChronoUnit.DAYS.between(fechaPedido, LocalDate.now());
+        return diasTranscurridos >= 0 && diasTranscurridos <= 15;
+    }
+
+    // Verifica que el estado del pedido sea ENTREGADO
+    private boolean verificarEstado(EstadoPedido estado) {
+        return estado == EstadoPedido.ENTREGADO;
     }
 }

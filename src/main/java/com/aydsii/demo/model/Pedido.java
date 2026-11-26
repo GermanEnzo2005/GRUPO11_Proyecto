@@ -113,4 +113,14 @@ public class Pedido {
     public void cambiarEstado(EstadoPedido nuevoEstado) {
         this.estadoPedido = nuevoEstado;
     }
+
+    // Para el CU-04: Solicitar Devolucion de Producto
+    // Devuelve el detalle pedido asociado al producto que se pasa por parametro. Lo busca recorriendo cada detalle pedido
+    // que contiene pedido
+    public DetallePedido getDetallePedidoPorProducto(Long idProducto) {
+        return this.detalles.stream()
+                .filter(d -> d.getProducto().getIdProducto().equals(idProducto))
+                .findFirst()
+                .orElse(null);
+    }
 }
