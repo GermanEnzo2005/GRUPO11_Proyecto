@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 
 
 @RestController
@@ -77,18 +78,55 @@ public class PedidoController {
             description = "Devolución creada con éxito",
             content = @Content(
                 mediaType = "application/json",
-                schema = @Schema(implementation = ApiResponse.class)
+                schema = @Schema(implementation = ApiResponse.class),
+                examples = @ExampleObject(
+                        value = """
+                        {
+                            "status": 201,
+                            "message": "Devolución creada con éxito. Su solicitud pasará a ser revisada por personal de ventas.",
+                            "data": {
+                                "descripcion": "Un vaso vino rajado",
+                                "estadoDevolucion": "PENDIENTE",
+                                "idDevolucion": 1,
+                                "idPedido": 1,
+                                "motivo": "Producto defectuoso"
+                            }
+                        }
+                        """
+                )
             )
         ),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
             responseCode = "400",
             description = "Datos inválidos, pedido no entregado, plazo vencido o cantidad a devolver excedida",
-            content = @Content(schema = @Schema(implementation = ApiResponse.class))
+            content = @Content(
+                schema = @Schema(implementation = ApiResponse.class),
+                examples = @ExampleObject(
+                        value = """
+                        {
+                            "status": 400,
+                            "message": "El pedido supera el plazo máximo de 15 días para devoluciones y ya no puede devolverse.",
+                            "data": null
+                        }
+                        """
+                )
+            )
         ),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
             responseCode = "404",
             description = "Pedido no encontrado",
-            content = @Content(schema = @Schema(implementation = ApiResponse.class))
+            content = @Content(
+                schema = @Schema(implementation = ApiResponse.class),
+                examples = @ExampleObject(
+                        value = """
+                        {
+                            "status": 404,
+                            "message": "No se encontró el pedido con ID: 99",
+                            "data": null
+                        }
+                        """
+                )
+            )
         )
     })
     public ResponseEntity<ApiResponse<DevolucionDTO>> hacerDevolucion(@Valid @RequestBody SolicitudDevolucionDTO solicitud) {

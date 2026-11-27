@@ -5,6 +5,7 @@ import com.aydsii.demo.dto.CarritoDTO;
 import com.aydsii.demo.service.CarritoService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -34,13 +35,47 @@ public class CarritoController {
             description = "Producto eliminado correctamente",
             content = @Content(
                 mediaType = "application/json",
-                schema = @Schema(implementation = ApiResponse.class)
+                schema = @Schema(implementation = ApiResponse.class),
+                examples = @ExampleObject(
+                        value = """
+                        {
+                            "status": 200,
+                            "message": "Producto eliminado del carrito",
+                            "data": {
+                                "idCarrito": 1,
+                                "items": [
+                                {
+                                    "idItemCarrito": 2,
+                                    "producto": "Vaso de vidrio reciclado",
+                                    "cantidad": 4,
+                                    "subtotal": 7200
+                                }
+                                ],
+                                "cantidadTotal": 4,
+                                "subtotal": 7200,
+                                "descuentoMayorista": false,
+                                "descuentoNivel": 0.1,
+                                "subtotalConDescuento": 6480
+                            }
+                        }
+                        """
+                )
             )
         ),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
             responseCode = "404",
             description = "Carrito o producto no encontrado",
-            content = @Content(schema = @Schema(implementation = ApiResponse.class))
+            content = @Content(schema = @Schema(implementation = ApiResponse.class),
+            examples = @ExampleObject(
+                        value = """
+                        {
+                            "status": 404,
+                            "message": "El producto no está en el carrito",
+                            "data": null
+                        }
+                        """
+                )
+            )
         )
     })
     public ResponseEntity<ApiResponse<CarritoDTO>> eliminarItem(@PathVariable Long idCarrito,
